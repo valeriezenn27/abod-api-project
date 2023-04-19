@@ -1,10 +1,11 @@
 ﻿using System;
-namespace abod_api_project.Interface
+namespace abod_api_project.Models
 {
-	public interface IAuditable
-	{
+    public interface IEntity
+    {
         DateTime CreatedAt { get; set; }
         DateTime UpdatedAt { get; set; }
+        bool Deleted { get; set; }
     }
 }
 

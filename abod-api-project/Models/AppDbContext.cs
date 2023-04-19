@@ -1,58 +1,52 @@
-﻿using abod_api_project.Interface;
-using abod_api_project.Models;
+﻿using abod_api_project.Models;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 
 namespace abod_api_project.Models
 {
     public class AppDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
+            AddAuditInfo();
+            return base.SaveChangesAsync(cancellationToken);
         }
 
-        public DbSet<Product> Products { get; set; }
-
-        public Task<int> SaveChangesAsync()
+        private void AddAuditInfo()
         {
-            var now = DateTime.UtcNow;
+            var entities = ChangeTracker.Entries()
+                .Where(x => x.Entity is IEntity && (x.State == EntityState.Added || x.State == EntityState.Modified));
 
-            foreach (var entry in ChangeTracker.Entries())
+            foreach (var entity in entities)
             {
-                if (entry.Entity is IAuditable auditable)
+                if (entity.State == EntityState.Added)
                 {
-                    switch (entry.State)
-                    {
-                        case EntityState.Added:
-                            auditable.CreatedAt = now;
-                            auditable.UpdatedAt = now;
-                            break;
-
-                        case EntityState.Modified:
-                            auditable.UpdatedAt = now;
-                            break;
-                    }
+                    ((IEntity)entity.Entity).CreatedAt = DateTime.UtcNow;
                 }
 
-                if (entry.Entity is ISoftDeletable deletable && entry.State == EntityState.Deleted)
-                {
-                    entry.State = EntityState.Modified;
-                    deletable.Deleted = true;
-                    deletable.DeletedAt = now;
-                }
+                ((IEntity)entity.Entity).UpdatedAt = DateTime.UtcNow;
             }
-
-            return base.SaveChangesAsync();
         }
+
+        public override int SaveChanges()
+        {
+            AddAuditInfo();
+            return base.SaveChanges();
+        }
+
+        public DbSet<Entity> MyEntities { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder.Entity<Product>().HasQueryFilter(x => !x.Deleted);
+            modelBuilder.Entity<Entity>()
+                .HasQueryFilter(x => !x.Deleted);
         }
     }
 }
